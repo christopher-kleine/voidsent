@@ -1,8 +1,10 @@
 module github.com/gridanias-helden/voidsent
 
-go 1.20
+go 1.21.0
 
 require (
+	github.com/christopher-kleine/sse v0.0.0-20230904184738-e758d0775b37
+	github.com/go-chi/chi/v5 v5.0.10
 	github.com/gorilla/websocket v1.5.0
 	github.com/joho/godotenv v1.5.1
 	github.com/oklog/ulid v1.3.1

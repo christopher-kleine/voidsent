@@ -5,16 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/christopher-kleine/sse"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/olahol/melody"
-	"github.com/ravener/discord-oauth2"
-	"golang.org/x/oauth2"
 
 	"github.com/gridanias-helden/voidsent/pkg/config"
-	"github.com/gridanias-helden/voidsent/pkg/middleware"
-	"github.com/gridanias-helden/voidsent/pkg/services"
 	"github.com/gridanias-helden/voidsent/pkg/services/session"
-	ws "github.com/gridanias-helden/voidsent/pkg/services/websocket"
 	"github.com/gridanias-helden/voidsent/pkg/storage/memory"
 )
 
@@ -24,41 +21,47 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	mel := melody.New()
+	hub := sse.New()
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	sessionService := memory.NewSessions(24 * time.Hour)
-	broker := services.NewBroker()
 
-	discordHandler := &session.Discord{
-		OAuth: &oauth2.Config{
-			RedirectURL:  appConfig.RedirectURL,
-			Scopes:       []string{discord.ScopeIdentify},
-			Endpoint:     discord.Endpoint,
-			ClientID:     appConfig.DiscordClientID,
-			ClientSecret: appConfig.DiscordClientSecret,
-		},
-		KV:       make(map[string]time.Time),
-		Sessions: sessionService,
-	}
-	wsHandler := ws.New(sessionService, broker, mel)
+	// discordHandler := &session.Discord{
+	// 	OAuth: &oauth2.Config{
+	// 		RedirectURL:  appConfig.RedirectURL,
+	// 		Scopes:       []string{discord.ScopeIdentify},
+	// 		Endpoint:     discord.Endpoint,
+	// 		ClientID:     appConfig.DiscordClientID,
+	// 		ClientSecret: appConfig.DiscordClientSecret,
+	// 	},
+	// 	KV:       make(map[string]time.Time),
+	// 	Sessions: sessionService,
+	// }
 	guestHandler := &session.GuestLogin{
 		Sessions: sessionService,
 	}
 
-	router := &http.ServeMux{}
-	wrappedRouter := middleware.Chain(
-		router,
-		middleware.WithLogging,
-		middleware.WithSession(sessionService),
-	)
+	// wrappedRouter := middleware.Chain(
+	// 	router,
+	// 	middleware.WithLogging,
+	// 	middleware.WithSession(sessionService),
+	// )
 
-	router.Handle("/", http.FileServer(http.Dir(appConfig.Static)))
-	// router.HandleFunc("/auth/login/discord", discordHandler.Auth) // Disable for now
-	// router.HandleFunc("/auth/callback/discord", discordHandler.Callback)
-	router.HandleFunc("/auth/login/guest", guestHandler.Register)
-	router.HandleFunc("/auth/logout", discordHandler.Logout)
-	router.HandleFunc("/ws", wsHandler.HTTPRequest)
+	r.Handle("/*", http.FileServer(http.Dir(appConfig.Static)))
+	r.Route("/auth", func(r chi.Router) {
+		// router.HandleFunc("/discord", discordHandler.Auth) // Disable for now
+		// router.HandleFunc("/discord/callback", discordHandler.Callback)
+		r.Get("/guest", guestHandler.Register)
+		// router.Get("/logout", discordHandler.Logout)
+	})
+	r.Route("/api", func(r chi.Router) {
+		r.Handle("/sse", hub)
+	})
 
 	log.Printf("Listening on %s", appConfig.Bind)
-	log.Fatal(http.ListenAndServe(appConfig.Bind, wrappedRouter))
+	log.Fatal(http.ListenAndServe(appConfig.Bind, r))
 }

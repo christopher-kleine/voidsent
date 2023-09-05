@@ -68,7 +68,8 @@ func (ws *WebSocket) Connect(s *melody.Session) {
 	}
 
 	s.Set("session", session)
-	s.Set("room", "lobby")
+	s.Set("game", "lobby")
+	s.Set("id", "")
 
 	time.Sleep(50 * time.Millisecond)
 
